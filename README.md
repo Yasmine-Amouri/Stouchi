@@ -6,16 +6,16 @@ Stouchi est une application web de gestion de budget personnel. Elle permet d'en
 ## Architecture (couches, modules, entités, données)
 ```mermaid
 flowchart TB
-	UI[Front-end web (HTML/CSS/JS)] --> API[API REST Spring Boot]
-	API --> SVC[Services]
-	SVC --> REPO[Repositories JPA]
-	REPO --> DB[(Base de données H2)]
+	UI["Front-end web (HTML/CSS/JS)"] --> API["API REST Spring Boot"]
+	API --> SVC["Services"]
+	SVC --> REPO["Repositories JPA"]
+	REPO --> DB[("Base de donnees H2")]
 
-	subgraph Domain[Entités]
-		CAT[Category]
-		TXN[Transaction]
-		BUD[MonthlyBudget]
-		TYP[TransactionType]
+	subgraph Domain["Entites"]
+		CAT["Category"]
+		TXN["Transaction"]
+		BUD["MonthlyBudget"]
+		TYP["TransactionType"]
 	end
 
 	API --> Domain
