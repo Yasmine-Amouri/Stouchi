@@ -3,12 +3,20 @@ let currentMonth, currentYear, allTransactions = [], allCategories = [], pieChar
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
+function getDefaultTransactionDate() {
+  const date = new Date(currentYear, currentMonth - 1, 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function init() {
   const now = new Date();
   currentMonth = now.getMonth() + 1;
   currentYear = now.getFullYear();
 
-  document.getElementById('txnDate').value = now.toISOString().split('T')[0];
+  document.getElementById('txnDate').value = getDefaultTransactionDate();
 
   bindNavigation();
   bindMonthNav();
@@ -324,7 +332,7 @@ function openModal() {
   document.getElementById('txnAmount').value = '';
   document.getElementById('txnNote').value = '';
   document.getElementById('txnType').value = 'EXPENSE';
-  document.getElementById('txnDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('txnDate').value = getDefaultTransactionDate();
   populateCategorySelects();
   document.getElementById('txnModal').classList.add('open');
 }
