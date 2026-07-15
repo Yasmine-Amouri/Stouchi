@@ -1,11 +1,17 @@
 package com.budgettracker.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "monthly_budgets", uniqueConstraints = {
     @UniqueConstraint(columnNames = {"budget_month", "budget_year"})
 })
+@Getter
+@Setter
+@NoArgsConstructor
 public class MonthlyBudget {
 
     @Id
@@ -20,39 +26,4 @@ public class MonthlyBudget {
 
     @Column(nullable = false)
     private Double budgetLimit;
-
-    public MonthlyBudget() {
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Integer getMonth() {
-        return month;
-    }
-
-    public void setMonth(Integer month) {
-        this.month = month;
-    }
-
-    public Integer getYear() {
-        return year;
-    }
-
-    public void setYear(Integer year) {
-        this.year = year;
-    }
-
-    public Double getBudgetLimit() {
-        return budgetLimit;
-    }
-
-    public void setBudgetLimit(Double budgetLimit) {
-        this.budgetLimit = budgetLimit;
-    }
 }

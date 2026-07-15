@@ -1,0 +1,25 @@
+### Register a user
+POST http://localhost:8080/auth/register
+Content-Type: application/json
+
+{
+    "name": "Alice",
+    "lastname": "Smith",
+    "username": "alice",
+    "password": "mypassword123"
+}
+
+### Login
+
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{
+    "username": "alice",
+    "password": "mypassword123"
+}
+
+### Get transactions (access without frontend)
+
+GET http://localhost:8080/api/transactions?month=7&year=2026
+Authorization: Bearer eyJhbGciOiJIUzM4NCJ9.eyJzdWIiOiJhbGljZSIsImlhdCI6MTc4NDEyOTA0MywiZXhwIjoxNzg0MTMyNjQzfQ.YuO0R5CVGcn0il3eA3iauyyAWd-rLvUd58G2F54Gz4gIQhvUoyKTdo3zwyNPTmBD
