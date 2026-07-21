@@ -1,3 +1,25 @@
+document.addEventListener("DOMContentLoaded", function () {
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+        window.location.href = "/login.html";
+        return;
+    }
+
+    const name = localStorage.getItem("name");
+    const lastname = localStorage.getItem("lastname");
+
+    document.getElementById("userName").textContent =
+        `${name} ${lastname}`;
+
+    document.getElementById("userAvatar").textContent =
+        `${name[0]}${lastname[0]}`;
+
+    console.log("User is authenticated");
+});
+
+
 const API = '';
 let currentMonth, currentYear, allTransactions = [], allCategories = [], pieChart = null;
 
@@ -16,6 +38,7 @@ function init() {
   bindBudget();
   bindCategories();
   bindFilters();
+  bindLogout();
 
   loadCategories().then(() => loadDashboard());
 }
@@ -63,24 +86,80 @@ function updateMonthLabel() {
   document.getElementById('monthLabel').textContent = `${MONTHS[currentMonth - 1]} ${currentYear}`;
 }
 
+function authHeaders() {
+
+    return {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("token")}`
+    };
+
+}
+
 async function get(url) {
-  const res = await fetch(API + url);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+
+    const res = await fetch(API + url, {
+        headers: {
+            "Authorization": `Bearer ${localStorage.getItem("token")}`
+        }
+    });
+
+    if (!res.ok)
+        throw new Error(await res.text());
+
+    return res.json();
 }
+
 async function post(url, data) {
-  const res = await fetch(API + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+
+    const res = await fetch(API + url, {
+
+        method: "POST",
+
+        headers: authHeaders(),
+
+        body: JSON.stringify(data)
+
+    });
+
+    if (!res.ok)
+        throw new Error(await res.text());
+
+    return res.json();
 }
+
 async function put(url, data) {
-  const res = await fetch(API + url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+
+    const res = await fetch(API + url, {
+
+        method: "PUT",
+
+        headers: authHeaders(),
+
+        body: JSON.stringify(data)
+
+    });
+
+    if (!res.ok)
+        throw new Error(await res.text());
+
+    return res.json();
 }
+
 async function del(url) {
-  const res = await fetch(API + url, { method: 'DELETE' });
-  if (!res.ok) throw new Error(await res.text());
+
+    const res = await fetch(API + url, {
+
+        method: "DELETE",
+
+        headers: {
+            "Authorization": `Bearer ${localStorage.getItem("token")}`
+        }
+
+    });
+
+    if (!res.ok)
+        throw new Error(await res.text());
+
 }
 
 async function loadCategories() {
@@ -430,6 +509,25 @@ function bindBudget() {
       await loadBudgetPage();
     } catch(e) { alert('Error: ' + e.message); }
   });
+}
+
+function bindLogout() {
+
+    document
+        .getElementById("logoutBtn")
+        .addEventListener("click", logout);
+
+}
+
+function logout() {
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("name");
+    localStorage.removeItem("lastname");
+
+    window.location.href = "/login.html";
+
 }
 
 function fmt(n) { return (parseFloat(n)||0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }

@@ -40,8 +40,13 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
                     .requestMatchers(
+                            "/register.html",
+                            "/login.html",
+                            "/js/**",
+                            "/css/**",
                             "/auth/register",
-                            "/auth/login"
+                            "/auth/login",
+                            "/index.html"
                     ).permitAll()
                     .anyRequest().authenticated()
             )

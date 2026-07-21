@@ -84,6 +84,6 @@ public class UserService
                 user.getUsername()
         );
 
-        return new AuthResponse(token);
+        return new AuthResponse(token, user.getUsername(), user.getName(), user.getLastname());
     }
 }
