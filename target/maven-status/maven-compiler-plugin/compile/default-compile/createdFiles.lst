@@ -18,7 +18,6 @@ com/budgettracker/service/BudgetService.class
 com/budgettracker/filter/JwtAuthenticationFilter.class
 com/budgettracker/entity/TransactionType.class
 com/budgettracker/entity/MonthlyBudget.class
-com/budgettracker/config/DataLoader.class
 com/budgettracker/entity/Transaction.class
 com/budgettracker/service/TransactionService.class
 com/budgettracker/entity/User.class

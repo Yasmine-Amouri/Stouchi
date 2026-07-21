@@ -36,4 +36,8 @@ public class Transaction {
     private LocalDate date;
 
     private String note;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 }

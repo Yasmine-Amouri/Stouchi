@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "monthly_budgets", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"budget_month", "budget_year"})
+    @UniqueConstraint(columnNames = {"budget_month", "budget_year", "user_id"})
 })
 @Getter
 @Setter
@@ -26,4 +26,8 @@ public class MonthlyBudget {
 
     @Column(nullable = false)
     private Double budgetLimit;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 }
