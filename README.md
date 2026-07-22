@@ -19,9 +19,7 @@ The project also serves as a practical learning project for Spring Boot, Spring 
 
 ## Original Project
 
-This project is forked from **<ORIGINAL_REPOSITORY_NAME>**.
-
-Repository: <https://github.com/badis99/Projet-AR.git>/<repository>>
+This project is forked from https://github.com/badis99/Projet-AR.git
 
 The original project provided the core budget management features. This fork extends it with Spring Security, JWT authentication, user-specific data isolation, Dockerized PostgreSQL, and DevOps improvements.
 
