@@ -22,4 +22,5 @@ com/budgettracker/entity/Transaction.class
 com/budgettracker/service/TransactionService.class
 com/budgettracker/entity/User.class
 com/budgettracker/service/CategoryService.class
+com/budgettracker/service/CurrentUserService.class
 com/budgettracker/controller/AuthController.class

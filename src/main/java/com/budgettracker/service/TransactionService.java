@@ -4,11 +4,10 @@ import com.budgettracker.entity.Category;
 import com.budgettracker.entity.Transaction;
 import com.budgettracker.entity.TransactionType;
 import com.budgettracker.entity.User;
+
 import com.budgettracker.repository.CategoryRepository;
 import com.budgettracker.repository.TransactionRepository;
-import com.budgettracker.repository.UserRepository;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,25 +17,25 @@ public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final CategoryRepository categoryRepository;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
     public TransactionService(TransactionRepository transactionRepository, CategoryRepository categoryRepository,
-                              UserRepository userRepository) {
+                              CurrentUserService currentUserService) {
         this.transactionRepository = transactionRepository;
         this.categoryRepository = categoryRepository;
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
     }
 
     public List<Transaction> getByMonthAndYear(int month, int year) {
-        return transactionRepository.findByMonthAndYear(getCurrentUser(), month, year);
+        return transactionRepository.findByMonthAndYear(currentUserService.getCurrentUser(), month, year);
     }
 
     public List<Transaction> getByMonthYearAndType(int month, int year, TransactionType type) {
-        return transactionRepository.findByMonthYearAndType(getCurrentUser(), month, year, type);
+        return transactionRepository.findByMonthYearAndType(currentUserService.getCurrentUser(), month, year, type);
     }
 
     public Transaction create(Transaction transaction) {
-        User currentUser = getCurrentUser();
+        User currentUser = currentUserService.getCurrentUser();
         if (transaction.getCategory() != null && transaction.getCategory().getId() != null) {
             Category cat = categoryRepository.findById(transaction.getCategory().getId())
                     .orElseThrow(() -> new IllegalArgumentException("Category not found"));
@@ -78,29 +77,20 @@ public class TransactionService {
     }
 
     public List<Object[]> getExpensesByCategory(int month, int year) {
-        return transactionRepository.sumExpensesByCategoryForMonth(getCurrentUser(), month, year);
+        return transactionRepository.sumExpensesByCategoryForMonth(currentUserService.getCurrentUser(), month, year);
     }
 
     private void ensureOwnedByCurrentUser(Transaction transaction) {
-        User currentUser = getCurrentUser();
+        User currentUser = currentUserService.getCurrentUser();
         if (transaction.getUser() == null || !currentUser.getId().equals(transaction.getUser().getId())) {
             throw new IllegalArgumentException("You do not have access to this transaction");
         }
     }
 
     private void ensureOwnedByCurrentUser(Category category) {
-        User currentUser = getCurrentUser();
+        User currentUser = currentUserService.getCurrentUser();
         if (category.getUser() == null || !currentUser.getId().equals(category.getUser().getId())) {
             throw new IllegalArgumentException("You do not have access to this category");
         }
-    }
-
-    private User getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getName() == null) {
-            throw new IllegalStateException("No authenticated user found");
-        }
-        return userRepository.findByUsername(authentication.getName())
-                .orElseThrow(() -> new IllegalStateException("Authenticated user not found"));
     }
 }

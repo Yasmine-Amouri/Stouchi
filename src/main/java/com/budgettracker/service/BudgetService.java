@@ -3,10 +3,9 @@ package com.budgettracker.service;
 import com.budgettracker.entity.MonthlyBudget;
 import com.budgettracker.entity.TransactionType;
 import com.budgettracker.entity.User;
+
 import com.budgettracker.repository.MonthlyBudgetRepository;
-import com.budgettracker.repository.UserRepository;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -18,35 +17,36 @@ public class BudgetService {
 
     private final MonthlyBudgetRepository budgetRepository;
     private final TransactionService transactionService;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
     public BudgetService(MonthlyBudgetRepository budgetRepository, TransactionService transactionService,
-                        UserRepository userRepository) {
+                        CurrentUserService currentUserService) {
         this.budgetRepository = budgetRepository;
         this.transactionService = transactionService;
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
     }
 
     public Optional<MonthlyBudget> getBudget(int month, int year) {
-        return budgetRepository.findByUserAndMonthAndYear(getCurrentUser(), month, year);
+        return budgetRepository.findByUserAndMonthAndYear(currentUserService.getCurrentUser(), month, year);
     }
 
     public MonthlyBudget setOrUpdateBudget(int month, int year, Double limit) {
-        MonthlyBudget budget = budgetRepository.findByUserAndMonthAndYear(getCurrentUser(), month, year)
+        MonthlyBudget budget = budgetRepository.findByUserAndMonthAndYear(currentUserService.getCurrentUser(), month, year)
                 .orElse(new MonthlyBudget());
         budget.setMonth(month);
         budget.setYear(year);
         budget.setBudgetLimit(limit);
-        budget.setUser(getCurrentUser());
+        budget.setUser(currentUserService.getCurrentUser());
         return budgetRepository.save(budget);
     }
 
     public Map<String, Object> getBudgetStatus(int month, int year) {
         Map<String, Object> status = new HashMap<>();
-        Optional<MonthlyBudget> budgetOpt = budgetRepository.findByUserAndMonthAndYear(getCurrentUser(), month, year);
+        User currentUser = currentUserService.getCurrentUser();
+        Optional<MonthlyBudget> budgetOpt = budgetRepository.findByUserAndMonthAndYear(currentUser, month, year);
 
-        double totalExpenses = transactionService.sumByMonthYearAndType(getCurrentUser(), month, year, TransactionType.EXPENSE);
-        double totalIncome = transactionService.sumByMonthYearAndType(getCurrentUser(), month, year, TransactionType.INCOME);
+        double totalExpenses = transactionService.sumByMonthYearAndType(currentUser, month, year, TransactionType.EXPENSE);
+        double totalIncome = transactionService.sumByMonthYearAndType(currentUser, month, year, TransactionType.INCOME);
 
         status.put("totalExpenses", totalExpenses);
         status.put("totalIncome", totalIncome);
@@ -89,18 +89,9 @@ public class BudgetService {
     }
 
     private void ensureOwnedByCurrentUser(MonthlyBudget budget) {
-        User currentUser = getCurrentUser();
+        User currentUser = currentUserService.getCurrentUser();
         if (budget.getUser() == null || !currentUser.getId().equals(budget.getUser().getId())) {
             throw new IllegalArgumentException("You do not have access to this budget");
         }
-    }
-
-    private User getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getName() == null) {
-            throw new IllegalStateException("No authenticated user found");
-        }
-        return userRepository.findByUsername(authentication.getName())
-                .orElseThrow(() -> new IllegalStateException("Authenticated user not found"));
     }
 }

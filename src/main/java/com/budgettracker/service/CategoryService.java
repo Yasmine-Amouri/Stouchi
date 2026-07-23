@@ -3,10 +3,9 @@ package com.budgettracker.service;
 import com.budgettracker.entity.Category;
 import com.budgettracker.entity.TransactionType;
 import com.budgettracker.entity.User;
+
 import com.budgettracker.repository.CategoryRepository;
-import com.budgettracker.repository.UserRepository;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,23 +15,23 @@ import java.util.concurrent.ThreadLocalRandom;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
-    public CategoryService(CategoryRepository categoryRepository, UserRepository userRepository) {
+    public CategoryService(CategoryRepository categoryRepository, CurrentUserService currentUserService) {
         this.categoryRepository = categoryRepository;
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
     }
 
     public List<Category> getAll() {
-        return categoryRepository.findByUser(getCurrentUser());
+        return categoryRepository.findByUser(currentUserService.getCurrentUser());
     }
 
     public List<Category> getByType(TransactionType type) {
-        return categoryRepository.findByUserAndType(getCurrentUser(), type);
+        return categoryRepository.findByUserAndType(currentUserService.getCurrentUser(), type);
     }
 
     public Category create(Category category) {
-        User currentUser = getCurrentUser();
+        User currentUser = currentUserService.getCurrentUser();
         if (categoryRepository.existsByUserAndName(currentUser, category.getName())) {
             throw new IllegalArgumentException("Category name already exists: " + category.getName());
         }
@@ -65,19 +64,10 @@ public class CategoryService {
     }
 
     private void ensureOwnedByCurrentUser(Category category) {
-        User currentUser = getCurrentUser();
+        User currentUser = currentUserService.getCurrentUser();
         if (category.getUser() == null || !currentUser.getId().equals(category.getUser().getId())) {
             throw new IllegalArgumentException("You do not have access to this category");
         }
-    }
-
-    private User getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getName() == null) {
-            throw new IllegalStateException("No authenticated user found");
-        }
-        return userRepository.findByUsername(authentication.getName())
-                .orElseThrow(() -> new IllegalStateException("Authenticated user not found"));
     }
 
     private String randomColor() {
