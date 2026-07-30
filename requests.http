@@ -1,12 +1,14 @@
+
 ### Register a user
+
 POST http://localhost:8080/auth/register
 Content-Type: application/json
 
 {
-    "name": "Alice",
+    "name": "ri",
     "lastname": "Smith",
-    "username": "alice",
-    "password": "mypassword123"
+    "username": "rii",
+    "password": "gojo123"
 }
 
 ### Login

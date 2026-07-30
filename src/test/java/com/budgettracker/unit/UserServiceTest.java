@@ -1,4 +1,7 @@
-package com.budgettracker.service;
+package com.budgettracker.unit;
+
+import com.budgettracker.service.UserService;
+import com.budgettracker.service.JwtService;
 
 import com.budgettracker.repository.CategoryRepository;
 import com.budgettracker.repository.UserRepository;
