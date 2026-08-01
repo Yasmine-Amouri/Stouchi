@@ -44,17 +44,6 @@ public class UserService {
         return savedUser;
     }
 
-    public void changePassword(String username, String newPassword) {
-        Optional<User> optionalUser = userRepository.findByUsername(username);
-        if (optionalUser.isEmpty()) {
-            throw new RuntimeException("User not found");
-        }
-
-        User user = optionalUser.get();
-        user.setPassword(passwordEncoder.encode(newPassword));
-        userRepository.save(user);
-    }
-
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BadCredentialsException("Invalid username or password"));

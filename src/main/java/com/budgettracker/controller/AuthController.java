@@ -3,9 +3,15 @@ package com.budgettracker.controller;
 import com.budgettracker.dto.AuthResponse;
 import com.budgettracker.dto.LoginRequest;
 import com.budgettracker.dto.RegisterRequest;
+
 import com.budgettracker.service.UserService;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
+
+import org.springframework.security.authentication.BadCredentialsException;
+
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -21,16 +27,30 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
 
-        userService.register(request);
+        try
+        {
+            userService.register(request);
+            return ResponseEntity.ok("User registered successfully");
 
-        return ResponseEntity.ok("User registered successfully");
+        }
+        catch (DataIntegrityViolationException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body("Username already exists");
+        } 
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
 
-        AuthResponse response = userService.login(request);
-
-        return ResponseEntity.ok(response);
+        try 
+        {
+            AuthResponse response = userService.login(request);
+            return ResponseEntity.ok(response);
+        } 
+        catch (BadCredentialsException e) 
+        {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body("Invalid username or password");
+        }
     }
 }
