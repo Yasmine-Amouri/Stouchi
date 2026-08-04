@@ -58,4 +58,25 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-            
+  
+  deploy:
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    needs: build-push
+
+    runs-on: ubuntu-latest
+
+    steps: 
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HOST_SERVER }}
+          username: deploy
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ~/stouchi
+            docker compose pull 
+            docker compose up -d
+
