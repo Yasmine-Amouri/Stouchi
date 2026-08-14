@@ -28,8 +28,8 @@ resource "azurerm_network_security_group" "stouchi" {
   resource_group_name = azurerm_resource_group.stouchi.name
 }
 
-### Resource : Network Security Rule ###
-resource "azurerm_network_security_rule" "stouchi" {
+### Resource : Network Security Rule allowing TCP-22 ###
+resource "azurerm_network_security_rule" "allow_ssh" {
   name                        = "allow-ssh"
   priority                    = 100 ### highest priority ! ###
   direction                   = "Inbound"
@@ -38,6 +38,21 @@ resource "azurerm_network_security_rule" "stouchi" {
   source_port_range           = "*"
   destination_port_range      = "22"
   source_address_prefix       = "*" ### allow traffic coming from any source IP address ###
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.stouchi.name
+  network_security_group_name = azurerm_network_security_group.stouchi.name
+}
+
+### Resource : Network Security Rule allowing TCP-8080 (app-container listens on that port) ###
+resource "azurerm_network_security_rule" "allow_8080" {
+  name                        = "allow-8080"
+  priority                    = 110
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "8080"
+  source_address_prefix       = "*"
   destination_address_prefix  = "*"
   resource_group_name         = azurerm_resource_group.stouchi.name
   network_security_group_name = azurerm_network_security_group.stouchi.name

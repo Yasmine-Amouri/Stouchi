@@ -9,6 +9,5 @@ terraform/azure/.terraform/
 terraform/azure/terraform.tfstate
 terraform/azure/terraform.tfstate.*
 terraform/azure/sku-results.txt
-terraform/azure/output.tf
 
-ansible/
+ansible/group_vars/stouchi-prod-server/vault.yml

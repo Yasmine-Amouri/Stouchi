@@ -1,0 +1,72 @@
+### Built-in Modules Documentation : https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/ ###
+### Docker Modules (Community Namespace) : https://docs.ansible.com/projects/ansible/latest/collections/community/docker/index.html ###
+
+- name: Configure Stouchi production server (ansible ssh as deploy user)
+  hosts: stouchi-prod-server
+  remote_user: deploy
+  become: true ### so Ansible can become root ### 
+
+  vars_files:
+    - group_vars/stouchi-prod-server/vault.yml
+
+  tasks:
+
+    - name: Install Docker and Docker Compose
+      ansible.builtin.apt:
+        name: 
+        - docker.io
+        - docker-compose-v2
+        state: present
+        update_cache: true
+    
+    - name: Add deploy to Docker group
+      ansible.builtin.user:
+        name: deploy
+        groups: docker
+        append: true
+
+    - name: Create Stouchi deployment directory
+      ansible.builtin.file:
+        path: /opt/stouchi
+        state: directory
+        owner: deploy
+        group: deploy
+        mode: '0755'
+
+    - name: Copy production compose file
+      ansible.builtin.copy:
+        src: ../docker-compose.prod.yml
+        dest: /opt/stouchi/docker-compose.prod.yml
+        owner: deploy
+        group: deploy
+        mode: '0644'
+
+    - name: Copy production environment file
+      ansible.builtin.copy:
+        src: ../.env
+        dest: /opt/stouchi/.env
+        owner: deploy
+        group: deploy
+        mode: '0600'
+    
+    - name: Log into GHCR
+      community.docker.docker_login:
+        registry_url: ghcr.io
+        username: "{{ ghcr_username }}"
+        password: "{{ ghcr_token }}"
+        reauthorize: true
+
+    - name: Pull images with Docker Compose
+      community.docker.docker_compose_v2_pull:
+        project_src: /opt/stouchi
+        files:
+          - docker-compose.prod.yml
+
+    - name: Start Stouchi Containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stouchi
+        files:
+          - docker-compose.prod.yml
+        state: present
+
+    
