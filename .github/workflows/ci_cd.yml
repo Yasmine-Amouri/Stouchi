@@ -130,7 +130,7 @@ jobs:
 
       - name: Run Ansible playbook
         working-directory: ansible
-        run: 
+        run: |
           ansible-playbook \
             -i inventory.yml \
             -l stouchi-prod-server \
