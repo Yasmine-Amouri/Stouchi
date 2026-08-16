@@ -111,8 +111,8 @@ jobs:
       
       - name: Configure SSH key on the Github Runner
         run: |
-            mkdir ~/.ssh
-            echo "${{ secrets.SERVER_SSH_KEY}} " > ~/.ssh/stouch_vm
+            mkdir -p ~/.ssh
+            echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/stouchi_vm
             chmod 600 ~/.ssh/stouchi_vm
       
       - name: Test SSH connection
@@ -123,7 +123,7 @@ jobs:
             deploy@$VM_IP \
             "echo SSH connection successful"
 
-            - name: Copy Ansible Vault password to temporary file
+      - name: Copy Ansible Vault password to temporary file
         run: |
           printf '%s' "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > /tmp/stouchi_vault_pwd
           chmod 600 /tmp/stouchi_vault_pwd
