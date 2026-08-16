@@ -67,16 +67,73 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    steps: 
+    permissions:
+      id-token: write
+      packages: write
+      contents: read
 
-      - name: Deploy
-        uses: appleboy/ssh-action@v1
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - name: Azure OIDC login
+        uses: azure/login@v2
         with:
-          host: ${{ secrets.HOST_SERVER }}
-          username: deploy
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd ~/stouchi
-            docker compose pull 
-            docker compose up -d
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
 
+      - name: Terraform init ### Github Runner connects to remote state thanks to backend.tf ###
+        working-directory: terraform/azure
+        run: terraform init
+
+      - name: Terraform plan
+        working-directory: terraform/azure
+        run: terraform plan
+
+      - name: Terraform apply
+        working-directory: terraform/azure
+        run: terraform apply -auto-approve
+
+      - name: Get VM public IP
+        working-directory: terraform/azure
+        run: |
+          VM_IP=$(terraform output -raw vm_public_ip)
+          echo "VM_IP=$VM_IP" >> "$GITHUB_ENV"
+        
+      - name: Install Ansible
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible
+      
+      - name: Configure SSH key on the Github Runner
+        run: |
+            mkdir ~/.ssh
+            echo "${{ secrets.SERVER_SSH_KEY}} " > ~/.ssh/stouch_vm
+            chmod 600 ~/.ssh/stouchi_vm
+      
+      - name: Test SSH connection
+        run: |
+          ssh \
+            -i ~/.ssh/stouchi_vm \
+            -o StrictHostKeyChecking=no \
+            deploy@$VM_IP \
+            "echo SSH connection successful"
+
+            - name: Copy Ansible Vault password to temporary file
+        run: |
+          printf '%s' "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > /tmp/stouchi_vault_pwd
+          chmod 600 /tmp/stouchi_vault_pwd
+
+      - name: Run Ansible playbook
+        working-directory: ansible
+        run: 
+          ansible-playbook \
+            -i inventory.yml \
+            -l stouchi-prod-server \
+            -e "ansible_host=$VM_IP" \
+            --vault-password-file /tmp/stouchi_vault_pwd \
+            playbook.yml

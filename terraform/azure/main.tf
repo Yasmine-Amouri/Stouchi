@@ -1,20 +1,5 @@
 ### Check Terraform Registry for documentation ###
 
-### Provider :  Azure ###
-terraform {
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "5.0.1"
-    }
-  }
-}
-
-provider "azurerm" {
-  features {}
-}
-
-
 ### Resource : Resource Group : Logical container that organizes related Azure resources ###
 resource "azurerm_resource_group" "stouchi" {
   name     = "stouchi-resources"

@@ -10,4 +10,7 @@ terraform/azure/terraform.tfstate
 terraform/azure/terraform.tfstate.*
 terraform/azure/sku-results.txt
 
-ansible/group_vars/stouchi-prod-server/vault.yml
+terraform/bootstrap/.terraform/
+terraform/bootstrap/terraform.tfstate
+terraform/bootstrap/terraform.tfstate.*
+
