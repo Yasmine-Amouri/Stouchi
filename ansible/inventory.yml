@@ -1,8 +1,6 @@
 all:
   hosts:
     stouchi-prod-server:
+      ansible_host: "{{ lookup('pipe', 'terraform -chdir=../terraform/azure output -raw vm_public_ip') }}"
       ansible_user: deploy
       ansible_ssh_private_key_file: ~/.ssh/stouchi_vm
-      ### private key is created on the runner from SERVER_SSH_KEY ###
-      ### Its path is already specified here ###
-      ### IP needs to be passed to Ansible cuz it's dynamically obtained from Terraform ! ###
