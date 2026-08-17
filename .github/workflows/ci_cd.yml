@@ -107,6 +107,12 @@ jobs:
         working-directory: terraform/azure
         run: terraform apply -auto-approve
 
+      - name: Start VM
+        run: |
+          az vm start \
+            --resource-group stouchi-resources \
+            --name stouchi-machine
+
       - name: Get VM public IP
         working-directory: terraform/azure
         run: |
