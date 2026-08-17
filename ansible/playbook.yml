@@ -41,9 +41,13 @@
         group: deploy
         mode: '0644'
 
-    - name: Copy production environment file
+    - name: Create production environment file
       ansible.builtin.copy:
-        src: ../.env
+        content: |
+          POSTGRES_USER={{ postgres_user }}
+          POSTGRES_DB={{ postgres_db }}
+          POSTGRES_PASSWORD={{ postgres_password }}
+          GITHUB_USERNAME={{ ghcr_username | lower }}
         dest: /opt/stouchi/.env
         owner: deploy
         group: deploy
