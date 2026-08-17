@@ -118,13 +118,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ansible
       
-      - name: Test SSH connection
+      - name: Wait for SSH connection
         run: |
-          ssh \
-            -i ~/.ssh/stouchi_vm \
-            -o StrictHostKeyChecking=no \
-            deploy@$VM_IP \
-            "echo SSH connection successful"
+          for i in {1..12}; do
+            if ssh \
+              -i ~/.ssh/stouchi_vm \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              deploy@$VM_IP \
+              "echo SSH connection successful"; then
+              exit 0
+            fi
+
+            echo "SSH not ready yet. Retrying in 10 seconds..."
+            sleep 10
+          done
+
+          echo "SSH connection could not be established."
+          exit 1
 
       - name: Copy Ansible Vault password to temporary file
         run: |
