@@ -83,6 +83,15 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       
+      - name: Configure SSH key on the Github Runner
+        run: |
+            mkdir -p ~/.ssh
+            echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/stouchi_vm
+            chmod 600 ~/.ssh/stouchi_vm
+      
+      - name: Derive SSH public key from private key before terraform init
+        run: ssh-keygen -y -f ~/.ssh/stouchi_vm > ~/.ssh/stouchi_vm.pub
+      
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
@@ -108,12 +117,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible
-      
-      - name: Configure SSH key on the Github Runner
-        run: |
-            mkdir -p ~/.ssh
-            echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/stouchi_vm
-            chmod 600 ~/.ssh/stouchi_vm
       
       - name: Test SSH connection
         run: |
