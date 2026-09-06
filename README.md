@@ -14,7 +14,7 @@ Stouchi is a personal budget management web application that allows users to:
 - Define monthly budgets
 - Track balances and spending
 
-The project also serves as a practical learning project for Spring Boot, Spring Security, JWT authentication, Docker, PostgreSQL, and DevOps.
+The project also serves as a practical learning project for Spring Boot, Spring Security, JWT authentication, Docker, PostgreSQL, and DevOps, including Terraform, Ansible, GitHub Actions, GHCR, and Microsoft Azure.
 
 
 ## Original Project
@@ -22,6 +22,80 @@ The project also serves as a practical learning project for Spring Boot, Spring 
 This project is forked from https://github.com/badis99/Projet-AR.git
 
 The original project provided the core budget management features. This fork extends it with Spring Security, JWT authentication, user-specific data isolation, Dockerized PostgreSQL, and DevOps improvements.
+
+---
+
+# Repository File Architecture
+
+```text
+Stouchi/
+│
+├── .github/
+│   └── workflows/
+│       └── ci_cd.yml
+│
+├── ansible/
+│   ├── playbook.yml
+│   ├── inventory.yml
+│   ├── group_vars/
+│       └── stouchi-prod-server/
+│           └── vault.yml
+│  
+├── terraform/
+│   ├── azure/
+│   │   ├── backend.tf
+│   │   ├── providers.tf
+│   │   ├── main.tf
+│   │   └── output.tf
+│   │
+│   └── bootstrap/
+│       ├── main.tf
+│       └── providers.tf
+│
+├── scripts/
+│   └── (developer/operator helper scripts: to add later)
+│
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   └── resources/
+│   └── test/
+│       └── java/
+│       └── resources/
+│
+├── Dockerfile
+├── docker-compose.yml
+├── docker-compose.prod.yml
+├── .dockerignore
+├── .env.example
+├── .gitignore
+├── pom.xml
+├── requests.http
+└── README.md
+```
+
+The main separation is:
+
+```text
+Application code
+    └── src/
+
+CI/CD automation
+    └── .github/workflows/
+
+Server configuration and deployment
+    └── ansible/
+
+Infrastructure as Code
+    └── terraform/
+
+Operational helper scripts
+    └── scripts/
+```
+
+The `terraform/bootstrap/` configuration is kept separate from
+`terraform/azure/` because the bootstrap creates the remote Terraform
+state infrastructure used by the main Azure configuration.
 
 ---
 
@@ -1084,24 +1158,1817 @@ A future optimization would store the fully loaded User inside the Authenticatio
 
 ---
 
-# Future Improvements
+# CI/CD Pipeline
 
-- Change password
-- Forgot password
-- Refresh tokens
-- Delete account
-- Better validation
-- Better error messages
-- Profile page
-- GitHub Actions CI
-- Cloud deployment
-- Terraform
-- Monitoring and logging
-- Authenticated endpoint integration tests (Authorization: Bearer ...)
-- Expired JWT and invalid JWT tests
-- Budget/transaction integration tests
-- Category CRUD integration tests
-- End-to-End (E2E) tests
-- Performance tests
-- Security tests
-- Introduce Flyway database migrations (`src/main/resources/db/migration/`)
+Stouchi uses **GitHub Actions** to automate testing, container image
+delivery, infrastructure provisioning, and production deployment. The
+pipeline connects several DevOps tools, each with a distinct
+responsibility:
+
+-   **GitHub Actions** → CI/CD orchestration
+-   **Maven / JUnit / Testcontainers** → automated testing
+-   **Docker** → application packaging and runtime
+-   **GHCR (GitHub Container Registry)** → Docker image registry
+-   **Terraform** → infrastructure as code
+-   **Microsoft Azure** → cloud infrastructure / IaaS
+-   **Ansible** → server configuration and application deployment
+-   **Docker Compose** → production container orchestration
+
+The goal is to make deployment reproducible and independent of the
+developer's local machine.
+
+------------------------------------------------------------------------
+
+## 1. Current Pipeline
+
+The current workflow is intentionally divided into three jobs:
+
+``` text
+                         GitHub Actions
+                              │
+                ┌─────────────┼─────────────┐
+                │             │             │
+                ▼             ▼             ▼
+             test        build-push       deploy
+                │             │             │
+                ▼             ▼             ▼
+          Maven tests    Docker build   Azure OIDC
+                              │          Terraform
+                              ▼          Ansible
+                             GHCR            │
+                                             ▼
+                                        Azure VM
+                                             │
+                                             ▼
+                                      Stouchi containers
+```
+
+The dependency chain is:
+
+``` text
+test
+  │
+  ▼
+build-push
+  │
+  ▼
+deploy
+```
+
+Therefore:
+
+-   if tests fail, the image is not built/pushed;
+-   if the image build/push fails, deployment does not start;
+-   deployment runs only after the previous stage succeeds.
+
+The `deploy` job is also restricted to pushes to `main`:
+
+``` yaml
+if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+```
+
+This means pull requests can run CI without automatically deploying to
+production.
+
+------------------------------------------------------------------------
+
+# CI
+
+## 2. GitHub-hosted Runners
+
+Each GitHub Actions job runs on its own temporary GitHub-hosted runner.
+
+Conceptually:
+
+``` text
+Workflow
+   │
+   ├── test
+   │     └── temporary Ubuntu runner
+   │
+   ├── build-push
+   │     └── temporary Ubuntu runner
+   │
+   └── deploy
+         └── temporary Ubuntu runner
+```
+
+The runners are independent. This is why jobs generally need their own
+`actions/checkout` step and their own setup.
+
+After a job finishes, its runner is discarded. Therefore, files created
+on one runner cannot be assumed to exist on another runner.
+
+This is particularly important for Terraform state: keeping
+`terraform.tfstate` only on the runner would lose the state when the
+runner disappears.
+
+------------------------------------------------------------------------
+
+## 3. Test Job
+
+The CI stage currently performs:
+
+``` text
+GitHub Actions
+      │
+      ▼
+Create fresh Ubuntu runner
+      │
+      ▼
+Checkout repository
+      │
+      ▼
+Install Temurin JDK 17
+      │
+      ▼
+Restore Maven cache
+      │
+      ▼
+mvn test
+      │
+      ├── Unit tests
+      └── Integration tests
+              │
+              ▼
+       Testcontainers
+              │
+              ▼
+       PostgreSQL container
+```
+
+GitHub-hosted Ubuntu runners already provide Docker, so no separate
+Docker installation is required for Testcontainers to start PostgreSQL
+during the integration tests.
+
+The current workflow uses:
+
+``` yaml
+- name: Set up JDK 17 and cache Maven
+  uses: actions/setup-java@v4
+  with:
+    distribution: temurin
+    java-version: '17'
+    cache: maven
+```
+
+and:
+
+``` yaml
+- name: Run tests
+  run: mvn test
+```
+
+The existing tests therefore become part of the deployment gate rather
+than something that must be run manually before every deployment.
+
+------------------------------------------------------------------------
+
+## 4. Building and Publishing the Docker Image
+
+After tests pass:
+
+``` text
+Tests pass
+    │
+    ▼
+Docker build
+    │
+    ▼
+stouchi-app image
+    │
+    ▼
+GHCR
+```
+
+The `Dockerfile` describes how the application becomes an image:
+
+``` text
+pom.xml + src/
+       │
+       ▼
+   Dockerfile
+       │
+       ▼
+ Maven image
+       │
+       ├── copy pom.xml
+       ├── download dependencies
+       ├── copy src/
+       └── mvn package
+              │
+              ▼
+           .jar
+              │
+              ▼
+ Eclipse Temurin JRE image
+              │
+              ▼
+        stouchi-app image
+```
+
+The multi-stage Dockerfile separates the build environment from the
+runtime environment.
+
+The development and production Compose files also have different
+responsibilities:
+
+``` text
+docker-compose.yml
+        │
+        └── development
+              └── build application locally
+
+docker-compose.prod.yml
+        │
+        └── production
+              └── pull already-built image from GHCR
+```
+
+Production should pull the tested image rather than rebuild the source
+code:
+
+``` text
+Developer
+    │
+    ▼
+GitHub Actions
+    │
+    │ docker build
+    ▼
+GHCR
+    │
+    │ docker pull
+    ▼
+Production VM
+```
+
+At this point, the application is **not running on the GitHub runner**.
+The Docker image is an artifact, for example:
+
+``` text
+ghcr.io/yasmine-amouri/stouchi-app:main
+```
+
+It is the packaged version of the application that the production server
+will later pull.
+
+------------------------------------------------------------------------
+
+## 5. GHCR Authentication
+
+GitHub Actions can authenticate to GHCR using credentials that GitHub
+provides automatically.
+
+Two important GitHub-provided values are:
+
+-   `github.actor` → the user who triggered the workflow
+-   `GITHUB_TOKEN` → a temporary token automatically generated for the
+    workflow run
+
+They are not manually created repository secrets.
+
+The workflow gives itself:
+
+``` yaml
+permissions:
+  contents: read
+  packages: write
+```
+
+which means:
+
+``` text
+contents: read
+    │
+    └── allows checkout to read the repository
+
+packages: write
+    │
+    └── allows the workflow to publish Docker images to GHCR
+```
+
+### Image versioning
+
+A useful improvement is **dynamic Git-based image tagging**.
+
+Instead of identifying images only as:
+
+``` text
+:main
+```
+
+use tags such as:
+
+``` text
+:main
+:40e28fe
+```
+
+where the commit SHA identifies the exact source revision that produced
+the image.
+
+This makes deployments traceable:
+
+``` text
+Git commit
+    │
+    ▼
+Docker image
+    │
+    └── commit SHA
+           │
+           ▼
+      exact version
+```
+
+------------------------------------------------------------------------
+
+# CD
+
+## 6. Azure Authentication with OIDC
+
+Locally, Terraform can authenticate through:
+
+``` text
+az login
+    │
+    ▼
+Azure CLI credentials
+    │
+    ▼
+Terraform
+```
+
+GitHub Actions should not depend on a developer's local Azure login.
+
+Instead, the workflow uses:
+
+``` text
+GitHub Actions
+      │
+      │ OIDC token
+      ▼
+Microsoft Entra application
+      │
+      │ Federated Identity Credential
+      │
+      ▼
+Azure
+      │
+      ▼
+Terraform
+```
+
+OIDC is preferable to storing a long-lived Azure client secret in GitHub
+because the workflow obtains short-lived credentials through federated
+trust.
+
+The Azure login step uses:
+
+``` yaml
+client-id: ${{ secrets.AZURE_CLIENT_ID }}
+tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+```
+
+These are identifiers rather than passwords, but storing them as GitHub
+repository secrets avoids hardcoding environment-specific values into
+the workflow.
+
+The Azure OIDC setup also requires the Entra application/service
+principal to have an appropriate Azure RBAC role on the subscription.
+
+For this project, the built-in **Contributor** role was assigned at the
+subscription scope so Terraform can manage the required infrastructure.
+
+------------------------------------------------------------------------
+
+## 7. Terraform --- Infrastructure as Code
+
+Terraform is responsible for the infrastructure.
+
+``` text
+Terraform
+   │
+   ├── Resource Group
+   ├── Virtual Network
+   ├── Subnet
+   ├── Network Security Group
+   ├── Public IP
+   ├── Network Interface
+   └── Linux VM
+```
+
+Terraform is an **infrastructure manager**, not a
+configuration-management tool.
+
+A useful distinction is:
+
+``` text
+Terraform
+    │
+    └── "What infrastructure should exist?"
+
+Ansible
+    │
+    └── "How should the server/application be configured?"
+```
+
+Terraform providers are plugins that teach Terraform how to communicate
+with external systems. For example, the Azure provider allows Terraform
+to create Azure resources.
+
+The Terraform Registry acts as a library/catalog for providers and
+modules.
+
+------------------------------------------------------------------------
+
+## 8. Terraform's Dependency Graph
+
+One of Terraform's powerful features is that it describes relationships
+between resources instead of requiring a manually ordered list of
+commands.
+
+For Stouchi:
+
+``` text
+Resource Group
+      │
+      ├── Virtual Network
+      │       │
+      │       └── Subnet
+      │              │
+      │              └── NSG association
+      │
+      ├── NSG
+      │    ├── allow TCP 22
+      │    └── allow TCP 8080
+      │
+      ├── Public IP
+      │
+      └── Network Interface
+             │
+             └── Linux VM
+```
+
+Terraform determines the dependency order from these relationships.
+
+------------------------------------------------------------------------
+
+## 9. Azure Networking
+
+The production VM is placed inside an Azure Virtual Network.
+
+``` text
+Internet
+   │
+   │ Public IP
+   ▼
+Network Interface
+   │
+   │ Private IP
+   ▼
+Subnet
+   │
+   ▼
+Virtual Network
+   │
+   ▼
+Linux VM
+```
+
+The VM has both:
+
+-   a **private IP**, used inside the virtual network;
+-   a **public IP**, used for communication over the Internet.
+
+Different customers can have the same private IP ranges in separate
+virtual networks because those private networks are isolated.
+
+The Network Interface (NIC) connects the VM to the Azure virtual network
+and associates the public IP with the VM's IP configuration.
+
+------------------------------------------------------------------------
+
+```text
+Internet
+   │
+   │  20.XXX.XXX.123
+   ▼
+Azure Public IP
+   │
+   ▼
+Network Interface
+   │
+   ▼
+10.0.1.4: my VM IP inside my private network
+```
+
+and another customer can independently have:
+
+```text
+Internet
+   │
+   │  20.XXX.XXX.124
+   ▼
+Azure Public IP
+   │
+   ▼
+Network Interface
+   │
+   ▼
+10.0.1.4: other customer's VM IP inside their private network
+```
+
+## 10. Network Security Group
+
+The Network Security Group (NSG) is a set of network traffic rules.
+
+The current configuration allows:
+
+``` text
+Inbound
+   │
+   ├── TCP :22
+   │      └── SSH
+   │
+   └── TCP :8080
+          └── Stouchi application
+```
+
+Inbound rules control traffic entering the VM.
+
+The NSG is associated with the subnet:
+
+``` text
+NSG
+ │
+ │ association
+ ▼
+Subnet
+```
+
+The current development configuration allows traffic from any source. A
+future security improvement is to restrict SSH access to trusted source
+IPs when practical and avoid exposing unnecessary ports.
+
+------------------------------------------------------------------------
+
+## 11. VM Configuration
+
+The Linux VM is provisioned by Terraform.
+
+Terraform creates the initial `deploy` Linux user and installs its
+public SSH key during VM provisioning.
+
+Therefore Ansible does **not** need to create the `deploy` user.
+
+``` text
+Terraform
+   │
+   ├── creates VM
+   ├── creates deploy user
+   └── installs public SSH key
+             │
+             ▼
+       SSH as deploy
+             │
+             ▼
+          Ansible
+```
+
+The VM uses:
+
+-   a small `Standard_B2as_v2` size suitable for this student project;
+-   a `Standard_LRS` OS disk to keep storage costs low.
+
+Because Azure for Students can have regional/service restrictions and VM
+pricing differs by region, available regions and VM sizes should be
+checked before changing infrastructure.
+
+Useful commands include:
+
+``` bash
+az account list-locations \
+  --query "[].{Name:name,DisplayName:displayName}" \
+  -o table
+```
+
+and, for checking VM sizes in a region:
+
+``` bash
+az vm list-sizes \
+  --location swedencentral \
+  -o table | grep -i "Standard_B2s"
+```
+
+The exact VM SKU can be changed later if a cheaper or more appropriate
+size is available.
+
+------------------------------------------------------------------------
+
+## 13. Azure Resource Providers
+
+Azure resource types are grouped under **resource providers**. A
+namespace is Azure's identifier for a resource provider/category of
+services and resources.
+
+For example:
+
+```text
+Microsoft.Network
+    ├── Virtual Networks
+    ├── Subnets
+    ├── Network Security Groups
+    ├── Public IPs
+    └── Network Interfaces
+```
+
+The same concept applies to providers such as `Microsoft.Compute`. A
+provider may need to be registered in the subscription before resources
+from that provider can be created or managed.
+
+For example:
+
+```bash
+az provider register --namespace Microsoft.Network
+```
+
+This registers the `Microsoft.Network` resource provider in the Azure
+subscription. Its registration state can be monitored with:
+
+```bash
+watch -n 5 'az provider show -n Microsoft.Network --query registrationState -o tsv'
+```
+
+The command repeatedly checks the registration state every five seconds
+until it becomes `Registered`.
+
+The same registration process can be used for other namespaces, such as
+`Microsoft.Compute`.
+
+## Resource Group
+
+A **Resource Group** is a logical container for Azure resources. It does
+not run anything itself. It organizes related resources and provides a
+convenient scope for management and cost tracking.
+
+---
+
+## 14. Terraform `init`, `fmt`, `validate`, `plan`, and `apply`
+
+Important Terraform commands:
+
+``` text
+terraform init
+    │
+    └── initializes the configuration and downloads providers
+
+terraform fmt
+    │
+    └── formats Terraform configuration
+
+terraform validate
+    │
+    └── checks syntax and internal consistency
+
+terraform plan
+    │
+    └── previews infrastructure changes
+
+terraform apply
+    │
+    └── actually makes the changes
+```
+
+`terraform plan` does not create or modify infrastructure. It compares
+the Terraform configuration, Terraform state, and infrastructure that
+Terraform manages, then shows the proposed changes.
+
+The current deployment deliberately keeps:
+
+``` text
+terraform plan
+      │
+      ├── ❌ failure → stop
+      │
+      └── ✅ success
+             │
+             ▼
+      terraform apply
+```
+
+This makes the logs useful for learning and debugging because the
+intended infrastructure changes can be inspected before applying them.
+
+The pipeline can later add:
+
+``` bash
+terraform fmt -check
+terraform validate
+```
+
+before planning.
+
+Terraform also supports targeted recreation when necessary:
+
+``` bash
+terraform apply -replace="azurerm_linux_virtual_machine.stouchi"
+```
+
+This can be useful when a resource is stuck, corrupted, or deliberately
+needs to be recreated.
+
+------------------------------------------------------------------------
+
+# Terraform Remote State
+
+## 14. Why Remote State Is Necessary
+
+Terraform normally stores its state locally:
+
+``` text
+Developer machine
+      │
+      ▼
+terraform.tfstate
+      │
+      ▼
+Azure infrastructure
+```
+
+That does not work reliably for GitHub Actions because each runner is
+temporary.
+
+``` text
+Runner 1
+   │
+   └── local state
+         │
+         ▼
+       runner destroyed
+         │
+         └── state disappears
+```
+
+The next workflow run could therefore have no knowledge of
+infrastructure created by the previous runner.
+
+The solution is an Azure remote backend:
+
+``` text
+GitHub Actions / Developer machine
+             │
+             ▼
+         Terraform
+             │
+             ▼
+     Azure Blob Storage
+             │
+             └── stouchi.terraform.tfstate
+```
+
+A new runner can retrieve the existing state.
+
+------------------------------------------------------------------------
+
+## 15. Bootstrap Terraform Configuration
+
+The storage account and Blob container must exist **before** the main
+Terraform configuration can initialize its Azure backend.
+
+Therefore there are intentionally two Terraform configurations:
+
+``` text
+terraform/
+│
+├── bootstrap/
+│     ├── main.tf
+│     └── providers.tf
+│
+└── azure/
+      ├── backend.tf
+      ├── providers.tf
+      ├── main.tf
+      └── output.tf
+```
+
+The bootstrap configuration creates the backend infrastructure:
+
+``` text
+Bootstrap
+    │
+    ├── Resource Group
+    │       └── terraform-state
+    │
+    ├── Storage Account
+    │       └── stouchitfstate2026
+    │
+    └── Blob container
+            └── Terraform state
+```
+
+Then the main Stouchi Terraform configuration uses that storage as its
+backend.
+
+The distinction is important:
+
+``` text
+azurerm provider
+    └── manages Azure resources
+
+azurerm backend
+    └── tells Terraform where its state is stored
+```
+
+The backend itself does not create the Storage Account.
+
+The bootstrap is normally run initially or when the backend
+infrastructure itself needs to change; it does not need to run for every
+application deployment.
+
+There are consequently two independent Terraform states:
+
+``` text
+bootstrap state
+    └── tracks the Terraform-state infrastructure
+
+remote Stouchi state
+    └── tracks the VM, network, NSG, public IP, etc.
+```
+
+------------------------------------------------------------------------
+
+## 16. LRS vs GRS
+
+For the Terraform state storage:
+
+-   **LRS (Locally Redundant Storage)** keeps copies within the same
+    region and is cheaper.
+-   **GRS (Geo-Redundant Storage)** replicates data to another
+    geographic region and provides greater redundancy at additional
+    cost.
+
+For a student project, LRS is a reasonable low-cost choice.
+
+------------------------------------------------------------------------
+
+# Ansible
+
+## 17. Ansible --- Server Configuration and Deployment
+
+Ansible is **agentless**. No Ansible agent is installed on the
+production VM.
+
+The relationship is:
+
+``` text
+Terraform
+    │
+    │ creates infrastructure
+    ▼
+Azure VM
+    │
+    │ SSH
+    ▼
+Ansible
+    │
+    ├── install Docker / Docker Compose
+    ├── configure deploy user
+    ├── create /opt/stouchi
+    ├── create production .env
+    ├── copy docker-compose.prod.yml
+    ├── authenticate to GHCR
+    ├── docker compose pull
+    └── docker compose up
+```
+
+`/opt/stouchi` is used as the production application directory. `/opt`
+is conventionally used for optional/additional application software.
+
+The Ansible inventory defines the machines that Ansible manages, while
+the playbook defines the configuration/deployment tasks executed on
+them.
+
+------------------------------------------------------------------------
+
+## 18. Dynamic VM IP
+
+Previously, the inventory could execute Terraform itself to discover the
+VM IP:
+
+``` yaml
+ansible_host: "{{ lookup('pipe', 'terraform -chdir=../terraform/azure output -raw vm_public_ip') }}"
+```
+
+That approach made sense for local execution where Ansible was
+responsible for invoking Terraform.
+
+In GitHub Actions, Terraform is already executed by the deployment job,
+so Ansible should not execute Terraform a second time.
+
+The current approach is:
+
+``` text
+Terraform apply
+      │
+      ▼
+terraform output -raw vm_public_ip
+      │
+      ▼
+VM_IP
+      │
+      ▼
+GitHub Actions GITHUB_ENV
+      │
+      ▼
+ansible-playbook
+      │
+      ▼
+-e "ansible_host=$VM_IP"
+      │
+      ▼
+stouchi-prod-server
+      │
+      ▼
+SSH → deploy@VM_IP
+```
+
+The inventory therefore keeps the logical host name and SSH
+configuration, while the workflow dynamically provides the current IP.
+
+A future improvement would be to **modify or generate the inventory
+dynamically so that `ansible_host` does not need to be passed as an extra
+`-e` variable**. The `VM_IP` itself is still needed; the improvement is
+to place that value into the generated inventory rather than passing
+`ansible_host=$VM_IP` separately on the command line.
+
+GitHub Actions provides a special environment-file variable called: GITHUB_ENV
+GITHUB_ENV allows a workflow step to create an environment variable that is available to subsequent steps.
+
+------------------------------------------------------------------------
+
+## 19. SSH Authentication
+
+The private SSH key is stored as the GitHub repository secret:
+
+``` text
+Repository
+  → Settings
+  → Secrets and variables
+  → Actions
+  → SERVER_SSH_KEY
+```
+
+The runner creates its temporary SSH key files:
+
+``` text
+GitHub Secret
+      │
+      ▼
+~/.ssh/stouchi_vm
+      │
+      ├── private key
+      │
+      └── ssh-keygen -y
+              │
+              ▼
+        stouchi_vm.pub
+```
+
+The public key is derived from the private key with:
+
+``` bash
+ssh-keygen -y -f ~/.ssh/stouchi_vm > ~/.ssh/stouchi_vm.pub
+```
+
+This is needed because Terraform's `file()` function reads a file
+available to the Terraform process. A developer's local
+`~/.ssh/stouchi_vm.pub` does not automatically exist on a fresh GitHub
+runner.
+
+The runner creates `~/.ssh` with:
+
+``` bash
+mkdir -p ~/.ssh
+```
+
+rather than assuming the directory exists.
+
+------------------------------------------------------------------------
+
+## 20. Waiting for SSH
+
+Creating or starting a VM does not guarantee that its SSH service is
+immediately ready.
+
+The workflow therefore retries the connection:
+
+``` text
+Start VM
+   │
+   ▼
+Try SSH
+   │
+   ├── success → continue
+   │
+   └── failure
+          │
+          ▼
+     wait 10 seconds
+          │
+          └── retry
+```
+
+The current workflow attempts the connection up to 12 times.
+
+`ConnectTimeout=10` prevents each attempt from waiting indefinitely.
+
+The current command uses:
+
+``` text
+-o StrictHostKeyChecking=no
+```
+
+which skips SSH host-identity verification. This is convenient for an
+automatically created VM, but a more secure future implementation should
+provision the expected host key in `known_hosts` and keep strict
+host-key checking enabled.
+
+------------------------------------------------------------------------
+
+## 21. Ansible Vault and GHCR Credentials
+
+The production VM needs to pull the private GHCR image.
+
+The VM is not the GitHub Actions runner, so it cannot use the runner's
+automatic `GITHUB_TOKEN`.
+
+The flow is:
+
+``` text
+GitHub Actions
+      │
+      │ builds image
+      ▼
+     GHCR
+      ▲
+      │
+      │ GHCR credentials
+      │
+ Ansible Vault
+      ▲
+      │
+      │ Vault password
+      │
+GitHub Secret
+ANSIBLE_VAULT_PASSWORD
+```
+
+The Vault password is passed to Ansible through a temporary file:
+
+``` bash
+printf '%s' "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" \
+  > /tmp/stouchi_vault_pwd
+
+chmod 600 /tmp/stouchi_vault_pwd
+```
+
+Then:
+
+``` bash
+ansible-playbook \
+  -i inventory.yml \
+  -l stouchi-prod-server \
+  -e "ansible_host=$VM_IP" \
+  --vault-password-file /tmp/stouchi_vault_pwd \
+  playbook.yml
+```
+
+The Vault password itself is never committed to the repository.
+
+Useful local commands include:
+
+``` bash
+ansible-vault create group_vars/stouchi-prod-server/vault.yml
+ansible-vault edit group_vars/stouchi-prod-server/vault.yml
+```
+
+The encrypted Vault file can be committed because its contents are
+encrypted.
+
+------------------------------------------------------------------------
+
+## 22. `register` in Ansible
+
+Ansible's `register` keyword stores the result of a task in a variable,
+usually a dictionary.
+
+The exact fields depend on the module.
+
+For example:
+
+``` yaml
+- name: Check user
+  ansible.builtin.command: whoami
+  register: result
+
+- name: Debug result
+  ansible.builtin.debug:
+    var: result.stdout
+```
+
+This is useful when debugging deployment steps.
+
+A useful inventory inspection command is:
+
+``` bash
+ansible-inventory -i inventory.yml --graph
+```
+
+and an SSH/connectivity check is:
+
+``` bash
+ansible -i inventory.yml stouchi-prod-server -m ping
+```
+
+A successful ping returns:
+
+``` text
+pong
+```
+
+------------------------------------------------------------------------
+
+# Operational Cost Management
+
+## 23. Deallocating the VM During Development
+
+The VM does not need to remain running while development work is being
+done.
+
+When the production VM is not needed, it can be deallocated:
+
+``` bash
+az vm deallocate \
+  --resource-group stouchi-resources \
+  --name stouchi-machine
+```
+
+Then its power state can be checked:
+
+``` bash
+az vm get-instance-view \
+  --resource-group stouchi-resources \
+  --name stouchi-machine \
+  --query "instanceView.statuses[?starts_with(code, 'PowerState/')].displayStatus" \
+  -o tsv
+```
+
+A future improvement is to automate these repetitive operational
+commands with scripts:
+
+``` text
+scripts/
+├── vm-start.sh
+├── vm-stop.sh
+└── check-vm-skus.sh
+```
+
+For example, `vm-stop.sh` can deallocate the VM and immediately verify
+its state.
+
+The scripts can initially use the Stouchi resource group and VM name,
+and later accept arguments such as:
+
+``` bash
+./scripts/vm-stop.sh stouchi-resources stouchi-machine
+```
+
+This is a useful DevOps practice: repetitive operational commands become
+reproducible scripts instead of commands that must be remembered
+manually.
+
+The VM can also be restarted when deployment/testing is needed:
+
+``` bash
+az vm start \
+  --resource-group stouchi-resources \
+  --name stouchi-machine
+```
+
+The distinction is:
+
+``` text
+Deallocate
+    └── keep infrastructure, stop VM compute usage
+
+Destroy with Terraform
+    └── remove the managed infrastructure
+```
+
+The Terraform remote-state storage/bootstrap infrastructure should
+remain available when the application infrastructure is destroyed and
+recreated.
+
+Infrastructure managed by Terraform should preferably be changed through
+Terraform rather than manually deleting individual resources from the
+Azure Portal, so that Terraform state remains synchronized with reality.
+
+------------------------------------------------------------------------
+
+# Future CI/CD Improvements
+
+## 24. CI/CD Hardening and Quality Gates
+
+The current pipeline is:
+
+``` text
+test
+  ↓
+build image
+  ↓
+push to GHCR
+  ↓
+Terraform plan
+  ↓
+Terraform apply
+  ↓
+Ansible deployment
+```
+
+A stronger version could become:
+
+``` text
+                         ┌── Terraform fmt/check
+                         ├── Terraform validate
+                         ├── Maven tests
+                         ├── Ansible syntax/lint
+                         ├── dependency/security scan
+                         └── Docker image vulnerability scan
+                                      │
+                                      ▼
+                              Build Docker image
+                                      │
+                                      ▼
+                                   GHCR
+                                      │
+                                      ▼
+                              Terraform plan
+                                      │
+                                      ▼
+                            Production approval
+                                      │
+                                      ▼
+                              Terraform apply
+                                      │
+                                      ▼
+                               Start/wait VM
+                                      │
+                                      ▼
+                               Ansible deploy
+                                      │
+                                      ▼
+                                Health check
+```
+
+Potential improvements include:
+
+-   `terraform fmt -check`
+-   `terraform validate`
+-   Ansible syntax checking
+-   Ansible linting
+-   Docker image vulnerability scanning
+-   dependency/security scanning
+-   secret scanning
+-   preventing deployment when quality gates fail
+-   a dedicated `production` GitHub Actions environment
+-   GitHub Actions environment protection and manual approval before
+    production changes
+-   deployment summaries
+-   improved failure handling
+-   potentially separating CI and CD into different workflows
+-   deciding whether Terraform should run in a dedicated infrastructure
+    workflow or only when Terraform configuration changes.
+
+A possible long-term separation is:
+
+``` text
+CI workflow
+    │
+    ├── tests
+    ├── validation
+    ├── linting
+    ├── security scanning
+    └── image build/publish
+              │
+              ▼
+             GHCR
+
+CD workflow
+    │
+    ├── Terraform plan
+    ├── approval
+    ├── Terraform apply
+    ├── Ansible
+    └── health check
+```
+
+------------------------------------------------------------------------
+
+## 25. Deployment Health Checks
+
+Currently, a successful Ansible run means that the deployment tasks
+completed successfully. It does **not necessarily prove that the
+application is actually healthy**.
+
+A future final deployment verification should look like:
+
+``` text
+Ansible deployment
+       │
+       ▼
+Wait for application
+       │
+       ▼
+HTTP request
+       │
+       ▼
+HTTP 200?
+    /       \
+  yes        no
+   │          │
+   ▼          ▼
+success      fail
+```
+
+The health check should verify the actual deployed application rather
+than merely checking that Docker commands succeeded.
+
+------------------------------------------------------------------------
+
+# Monitoring and Logging
+
+## 26. Monitoring and Observability
+
+A future monitoring stack can use Prometheus, Grafana, and Loki:
+
+``` text
+                    ┌───────────────┐
+                    │   Stouchi     │
+                    │  Application  │
+                    └───────┬───────┘
+                            │
+                  ┌─────────┴─────────┐
+                  │                   │
+               metrics              logs
+                  │                   │
+                  ▼                   ▼
+             Prometheus              Loki
+                  │                   │
+                  └─────────┬─────────┘
+                            ▼
+                         Grafana
+```
+
+Grafana could eventually provide dashboards for:
+
+-   CPU usage
+-   memory usage
+-   disk usage
+-   HTTP request rate
+-   HTTP errors
+-   response time
+-   container status
+-   application metrics
+
+Possible alerts include:
+
+``` text
+CPU > 80% for 5 minutes
+        │
+        ▼
+      alert
+```
+
+or:
+
+``` text
+Application unavailable
+        │
+        ▼
+      alert
+```
+
+Grafana itself is not necessarily difficult to start with. The main
+complexity is deciding what to monitor and setting up the metrics/log
+collection. A simple first milestone would be VM/container metrics
+before adding application-level observability.
+
+------------------------------------------------------------------------
+
+# Scheduled Operations and Backups
+
+## 27. Cron Jobs
+
+A future operational improvement is scheduled maintenance using cron or
+another scheduler.
+
+For example:
+
+``` text
+cron
+ │
+ ├── PostgreSQL backup
+ │       │
+ │       ▼
+ │    pg_dump
+ │       │
+ │       ▼
+ │   backup storage
+ │
+ └── cleanup old logs/data
+```
+
+Before implementing this, the available scheduled-task options should be
+evaluated, including whether the task belongs in Linux cron, a systemd
+timer, GitHub Actions, or an Azure-managed service.
+
+The important goal is to avoid manual recurring operations.
+
+------------------------------------------------------------------------
+
+## 28. Automated PostgreSQL Backups
+
+PostgreSQL currently runs in Docker, so database backups can be
+automated with `pg_dump`.
+
+A possible architecture is:
+
+``` text
+PostgreSQL container
+        │
+        ▼
+      pg_dump
+        │
+        ▼
+    backup file
+        │
+        ▼
+ scheduled job
+        │
+        ▼
+ Azure Storage
+```
+
+This should eventually include a retention policy so old backups do not
+accumulate indefinitely.
+
+------------------------------------------------------------------------
+
+# Security Roadmap
+
+## 29. Security Improvements
+
+The current project already uses several security mechanisms:
+
+``` text
+OIDC
+GitHub Secrets
+Ansible Vault
+SSH keys
+Network Security Group
+JWT
+```
+
+The security pipeline can be strengthened with:
+
+``` text
+GitHub
+   │
+   ├── dependency scanning
+   ├── Docker image scanning
+   ├── Terraform security scanning
+   └── secret scanning
+```
+
+Additional Azure/server hardening can include:
+
+-   restrict SSH source IPs where practical;
+-   avoid exposing unnecessary ports;
+-   HTTPS instead of plain HTTP;
+-   least-privilege Azure RBAC instead of unnecessarily broad
+    permissions;
+-   SSH hardening;
+-   firewall configuration.
+
+The current subscription-level Contributor assignment is convenient for
+Terraform, but a future least-privilege design should investigate
+whether narrower roles can safely cover the exact Azure resources
+Terraform manages.
+
+------------------------------------------------------------------------
+
+# Testing Roadmap
+
+## 30. Tests Supporting the Deployment Pipeline
+
+The existing unit and integration tests are important CI gates. The next
+testing levels can progressively increase confidence:
+
+### High priority
+
+-   authenticated endpoint integration tests using
+    `Authorization: Bearer ...`;
+-   expired JWT tests;
+-   invalid JWT tests;
+-   Budget/Transaction integration tests;
+-   Category CRUD integration tests;
+-   E2E tests.
+
+### Later
+
+-   performance tests;
+-   security tests.
+
+The progression can be viewed as:
+
+``` text
+Unit tests
+    │
+    ▼
+Integration tests
+    │
+    ▼
+Authenticated integration tests
+    │
+    ▼
+E2E tests
+    │
+    ├── performance tests
+    └── security tests
+```
+
+These tests make the CI pipeline meaningful: a deployment is not merely
+checking whether the project compiles, but whether increasingly large
+parts of the system behave correctly.
+
+------------------------------------------------------------------------
+
+# Database Migrations
+
+## 31. Flyway
+
+The application can eventually introduce **Flyway** for versioned
+database migrations.
+
+Instead of relying only on application startup/database configuration to
+create the schema:
+
+``` text
+src/main/resources/db/migration/
+├── V1__initial_schema.sql
+├── V2__add_users.sql
+├── V3__add_categories.sql
+└── V4__add_monthly_budget.sql
+```
+
+The deployment lifecycle becomes:
+
+``` text
+New deployment
+      │
+      ▼
+Application starts
+      │
+      ▼
+Flyway checks migration history
+      │
+      ▼
+Missing migration?
+      │
+      ▼
+Apply migration
+```
+
+This makes database changes versioned, reproducible, and suitable for
+automated deployments.
+
+------------------------------------------------------------------------
+
+# Application Roadmap
+
+## 32. Application Features
+
+Although the main focus of this project is increasingly DevOps-oriented,
+several application improvements can strengthen the system that the
+pipeline deploys:
+
+-   change password;
+-   forgot password;
+-   refresh tokens;
+-   delete account;
+-   better validation;
+-   better error messages;
+-   make `index.html` the initial endpoint instead of exposing
+    `register.html` or `login.html` as the first page.
+
+These features should be covered by the appropriate unit/integration/E2E
+tests as they are implemented.
+
+------------------------------------------------------------------------
+
+# Long-Term Deployment Architecture
+
+## 33. Target Architecture
+
+The overall direction of the project is:
+
+``` text
+                           Developer
+                               │
+                               ▼
+                            GitHub
+                               │
+                               ▼
+                       GitHub Actions
+                               │
+                ┌──────────────┼──────────────┐
+                │              │              │
+                ▼              ▼              ▼
+             Testing        Security       Validation
+                │              │              │
+                └──────────────┼──────────────┘
+                               │
+                               ▼
+                         Docker Build
+                               │
+                               ▼
+                              GHCR
+                               │
+                               ▼
+                        Terraform Plan
+                               │
+                               ▼
+                         Approval Gate
+                               │
+                               ▼
+                        Terraform Apply
+                               │
+                               ▼
+                           Azure VM
+                               │
+                               ▼
+                            Ansible
+                               │
+                ┌──────────────┼──────────────┐
+                │              │              │
+                ▼              ▼              ▼
+             Docker       PostgreSQL      Monitoring
+             Compose        backup        / Logging
+                │              │              │
+                ▼              ▼              ▼
+             Stouchi        Azure         Grafana
+             container      Storage
+
+                               │
+                               ▼
+                         Health Check
+                               │
+                         ┌─────┴─────┐
+                         │           │
+                        OK          FAIL
+                         │           │
+                         ▼           ▼
+                      Success      Alert
+```
+
+The main DevOps principle is to make each stage responsible for one
+concern:
+
+``` text
+Terraform
+    → infrastructure
+
+Ansible
+    → server configuration + deployment
+
+Docker
+    → packaging/runtime
+
+GHCR
+    → image storage
+
+GitHub Actions
+    → automation
+
+Azure
+    → cloud infrastructure
+
+Prometheus/Grafana/Loki
+    → observability
+```
+
+------------------------------------------------------------------------
+
+## 34. Operational Notes
+
+As a student project, cost is an important consideration.
+
+The Azure for Students offer can provide Azure credit, but the
+infrastructure should still be managed carefully. Deallocating the VM
+during periods where it is not needed is a practical way to reduce
+compute usage.
+
+When infrastructure is no longer needed for a period of development,
+Terraform can also destroy the application infrastructure while keeping
+the Terraform-state/bootstrap infrastructure. Later, the application
+infrastructure can be recreated with:
+
+``` bash
+cd terraform/azure
+terraform init
+terraform apply
+```
+
+because the remote state remains available.
+
+Historical Azure charges are not erased by deleting resources. Cost
+Management should therefore be used to inspect accumulated costs
+separately from the resources that currently exist.
+
+------------------------------------------------------------------------
+
+## 35. Final CI/CD Summary
+
+The current Stouchi pipeline has evolved from a simple:
+
+``` text
+test → build → push
+```
+
+into an infrastructure-aware deployment pipeline:
+
+``` text
+test
+  ↓
+build Docker image
+  ↓
+push to GHCR
+  ↓
+Azure OIDC authentication
+  ↓
+Terraform init
+  ↓
+Terraform plan
+  ↓
+Terraform apply
+  ↓
+start VM
+  ↓
+obtain VM IP dynamically
+  ↓
+wait for SSH
+  ↓
+Ansible + Vault
+  ↓
+GHCR authentication on VM
+  ↓
+docker compose pull
+  ↓
+docker compose up
+```
+
+The next evolution is to make the pipeline not only **automated**, but
+also **validated, secure, observable, reproducible, and operationally
+maintainable**:
+
+``` text
+               Automated
+                   │
+                   ▼
+             ┌───────────┐
+             │ CI / CD   │
+             └─────┬─────┘
+                   │
+       ┌───────────┼───────────┐
+       ▼           ▼           ▼
+   Validation   Security   Reproducibility
+       │           │           │
+       └───────────┼───────────┘
+                   ▼
+              Deployment
+                   │
+                   ▼
+             Health checks
+                   │
+                   ▼
+          Monitoring / Logging
+                   │
+                   ▼
+          Scheduled backups
+                   │
+                   ▼
+           Reliable operation
+```

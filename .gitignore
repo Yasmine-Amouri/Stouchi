@@ -4,6 +4,7 @@ target/
 
 ideas.txt
 ides_readme.txt
+chat_correction.txt
 
 terraform/azure/.terraform/
 terraform/azure/terraform.tfstate
