@@ -1,0 +1,70 @@
+### For Documentation: https://github.com/dorny ###
+
+name: Workflows Orchestrator
+
+on:
+  push:
+    branches:  [main]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+
+  detect:
+
+    runs-on: ubuntu-latest
+
+    outputs:
+      terraform: ${{ steps.changes.outputs.terraform }}
+      src: ${{ steps.changes.outputs.src }}
+      pom: ${{ steps.changes.outputs.pom }}
+      dockerfile: ${{ steps.changes.outputs.dockerfile }}
+    
+    steps:
+
+      - uses: actions/checkout@v4 ### paths-filter has the repo to determine what changed ###
+
+      - uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          filters: |
+            src:
+              - 'src/**'
+            pom:
+              - 'pom.xml'
+            dockerfile:
+              - 'Dockerfile'
+            terraform:
+              - 'terraform/**'
+  
+  infra:
+
+    needs: detect
+
+    if: needs.detect.outputs.terraform == 'true'
+    uses: ./.github/workflows/infra.yml
+    secrets: inherit
+
+  ci:
+
+    needs: detect
+
+    if: needs.detect.outputs.src == 'true' || needs.detect.outputs.pom == 'true' || needs.detect.outputs.dockerfile == 'true'
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+  
+  cd:
+
+    needs: [infra, ci]
+
+    ### always(): to let the if condition be evaluated even if a needed job was skipped/failed ###
+    if: |
+      always() &&
+      (needs.ci.result == 'success' || needs.ci.result == 'skipped') &&
+      (needs.infra.result == 'success' || needs.infra.result == 'skipped') &&
+      (needs.ci.result == 'success' || needs.infra.result == 'success')
+    uses: ./.github/workflows/cd.yml
+    secrets: inherit

@@ -1,0 +1,63 @@
+### For Documentation: https://github.com/actions : Org => actions ###
+### For Documentation: https://github.com/docker : Org => docker ###
+
+name: Testing + Building-Pushing Docker Image of App Java with Maven
+
+on:
+  workflow_call: ### pipeline.yml will call it when there are app changes ###
+  workflow_dispatch: ### Manual Triggering ###
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+
+  test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4 ### Org => actions ###
+
+      - name: Set up JDK 17 and cache Maven
+        uses: actions/setup-java@v4
+        with: 
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Run tests
+        run:  mvn test 
+
+  build-push:
+
+    needs: test
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+      - name: Login to GHCR
+        uses: docker/login-action@v3 ### Org => docker ###
+        with: 
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/stouchi-app
+          tags: |
+            type=sha
+
+      - name: Build and push Docker image to GHCRegistry
+        uses: docker/build-push-action@v6
+        with: 
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}

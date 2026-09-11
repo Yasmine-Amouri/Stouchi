@@ -1,76 +1,23 @@
-name: Java with Maven
+### For Documentation: https://github.com/actions : Org => actions ###
+### For Documentation: https://github.com/azure : Org => azure ###
+### For Documentation: https://github.com/hashicorp : Org => hashicorp ###
+
+name: Deploy App Java with Maven
 
 on:
-  push:
-    branches:  [main]
-  pull_request:
-    branches:  [main]
+  workflow_call: ### pipeline.yml will call it ###
+  workflow_dispatch: ### Manual Triggering ###
 
 permissions:
-  contents: read
-  packages: write
+    id-token: write
+    packages: read
+    contents: read
 
 jobs:
 
-  test:
-
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17 and cache Maven
-        uses: actions/setup-java@v4
-        with: 
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-
-      - name: Run tests
-        run:  mvn test 
-
-  build-push:
-
-    needs: test
-
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - uses: actions/checkout@v4
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with: 
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Docker metadata
-        uses: docker/metadata-action@v5
-        id: meta
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/stouchi-app
-
-      - name: Build and push Docker image to GHCRegistry
-        uses: docker/build-push-action@v6
-        with: 
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-  
   deploy:
 
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    needs: build-push
-
     runs-on: ubuntu-latest
-
-    permissions:
-      id-token: write
-      packages: write
-      contents: read
 
     steps:
 
@@ -91,22 +38,14 @@ jobs:
       
       - name: Derive SSH public key from private key before terraform init
         run: ssh-keygen -y -f ~/.ssh/stouchi_vm > ~/.ssh/stouchi_vm.pub
-      
-      - name: Set up Terraform
+
+      - name: Set up Terraform ### We still need to run Terraform in deploy-job to get VM_IP ###
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform init ### Github Runner connects to remote state thanks to backend.tf ###
         working-directory: terraform/azure
         run: terraform init
-
-      - name: Terraform plan
-        working-directory: terraform/azure
-        run: terraform plan
-
-      - name: Terraform apply
-        working-directory: terraform/azure
-        run: terraform apply -auto-approve
-
+      
       - name: Start VM
         run: |
           az vm start \

@@ -1,0 +1,53 @@
+### For Documentation: https://github.com/actions : Org => actions ###
+### For Documentation: https://github.com/azure : Org => azure ###
+### For Documentation: https://github.com/hashicorp : Org => hashicorp ###
+
+name: Infrastructure Workflow 
+
+on:
+  workflow_call: ### pipeline.yml will call it when there are Terraform changes ###
+  workflow_dispatch: ### Manual Triggering ###
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+
+  infra:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - name: Azure OIDC login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init ### Github Runner connects to remote state thanks to backend.tf ###
+        working-directory: terraform/azure
+        run: terraform init
+      
+      - name: Terraform Format
+        working-directory: terraform/azure
+        run: terraform fmt -check ### CI shouldn't touch code with just terraform fmt ###
+
+      - name: Terraform Validate 
+        working-directory: terraform/azure
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: terraform/azure
+        run: terraform plan
+
+      - name: Terraform Apply
+        working-directory: terraform/azure
+        run: terraform apply -auto-approve
