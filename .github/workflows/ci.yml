@@ -54,6 +54,7 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/stouchi-app
           tags: |
             type=sha
+            type=raw,value=main ### for now, cd will use a static tagging main, later we'll see how to pass dynamic tagging to docker-compose.prod.yml ###
 
       - name: Build and push Docker image to GHCRegistry
         uses: docker/build-push-action@v6
