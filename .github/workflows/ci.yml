@@ -1,5 +1,6 @@
 ### For Documentation: https://github.com/actions : Org => actions ###
 ### For Documentation: https://github.com/docker : Org => docker ###
+### For Documentation: https://github.com/ansible : Org => ansible ###
 
 name: Testing + Building-Pushing Docker Image of App Java with Maven
 
@@ -31,7 +32,7 @@ jobs:
       - name: Run tests
         run:  mvn test 
 
-  build-push:
+  build-scan-push:
 
     needs: test
 
@@ -40,6 +41,7 @@ jobs:
     steps:
 
       - uses: actions/checkout@v4
+
       - name: Login to GHCR
         uses: docker/login-action@v3 ### Org => docker ###
         with: 
@@ -47,18 +49,53 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker metadata
-        uses: docker/metadata-action@v5
-        id: meta
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/stouchi-app
-          tags: |
-            type=sha
-            type=raw,value=main ### for now, cd will use a static tagging main, later we'll see how to pass dynamic tagging to docker-compose.prod.yml ###
+      ### no need for docker metadata when using docker commands + trivy instead of build-push action ###
+      ### - name: Docker metadata
+      ###  uses: docker/metadata-action@v5
+      ###  id: meta
+      ###  with:
+      ###    images: ghcr.io/${{ github.repository_owner }}/stouchi-app
+      ###    tags: |
+      ###      type=sha
+      ###      type=raw,value=main 
+          ### for now, cd will use a static tagging main, later we'll see how to pass dynamic tagging to docker-compose.prod.yml ###
 
-      - name: Build and push Docker image to GHCRegistry
-        uses: docker/build-push-action@v6
-        with: 
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+      - name: Build Docker Image with two tags from Dockerfile
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/stouchi-app:main \
+            -t ghcr.io/${{ github.repository_owner }}/stouchi-app:${{ github.sha }} \
+            .
+
+      - name: Scan main image with Trivy ### no need to scan both images, same image different names ###
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: 'ghcr.io/${{ github.repository_owner }}/stouchi-app:main'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Push Both Docker images to GHCR
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/stouchi-app:main
+          docker push ghcr.io/${{ github.repository_owner }}/stouchi-app:${{ github.sha }}
+    
+  ansible-test:
+
+    needs: build-push
+
+    runs-on: ubuntu-24.04
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      ### ansible-lint performs also internally a syntax check ###
+      - name: Run ansible-lint
+        uses: ansible/ansible-lint@main  ###
+        with:
+          setup_python: "true"
+          python_version: "3.14"
+          working_directory: ./ansible
