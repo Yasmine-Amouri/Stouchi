@@ -63,7 +63,7 @@ resource "azurerm_subnet" "stouchi" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-### Resource : Subnet NSG Association : To apply Sec rules on the Subnet ###
+### Resource : Subnet NSG Association : To apply Sec Rules on the Subnet ###
 resource "azurerm_subnet_network_security_group_association" "stouchi" {
   subnet_id                 = azurerm_subnet.stouchi.id
   network_security_group_id = azurerm_network_security_group.stouchi.id
