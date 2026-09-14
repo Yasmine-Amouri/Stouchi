@@ -47,7 +47,11 @@ public class SecurityConfig {
                             "/auth/register",
                             "/auth/login",
                             "/index.html",
-                            "/error"
+                            "/error",
+                            "/actuator/health", /*for cd.yml health-check*/
+                            "/actuator/health/liveness",
+                            "/actuator/health/readiness"
+
                     ).permitAll()
                     .anyRequest().authenticated()
             )

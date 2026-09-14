@@ -96,3 +96,26 @@ jobs:
             -e "ansible_host=$VM_IP" \
             --vault-password-file /tmp/stouchi_vault_pwd \
             playbook.yml
+      
+      - name: Health Check
+        run: |
+          for i in {1..12}; do
+            echo "Health Check Attempt $i/12"
+
+            liveness=$(curl -s --fail "http://${VM_IP}:8080/actuator/health/liveness")
+            readiness=$(curl -s --fail "http://${VM_IP}:8080/actuator/health/readiness")
+
+            echo "Liveness:  $liveness"
+            echo "Readiness: $readiness"
+
+            if [[ "$liveness" == '{"status":"UP"}' && "$readiness" == '{"status":"UP"}' ]]; then
+              echo "Application is healthy!"
+              exit 0
+            fi
+
+            echo "Application not ready yet. Waiting 5 seconds..."
+            sleep 5
+          done
+
+          echo "Application failed the health check."
+          exit 1

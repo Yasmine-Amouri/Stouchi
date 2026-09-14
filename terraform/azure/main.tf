@@ -6,7 +6,7 @@ resource "azurerm_resource_group" "stouchi" {
   location = "swedencentral"
 }
 
-### Resource : Network Security Group : Set of network traffic rules ###
+### Resource : Network Security Group : Set of Network traffic rules ###
 resource "azurerm_network_security_group" "stouchi" {
   name                = "stouchi-nsg"
   location            = azurerm_resource_group.stouchi.location
