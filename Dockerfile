@@ -7,7 +7,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 # RUN STAGE
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:17-jre-noble
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
