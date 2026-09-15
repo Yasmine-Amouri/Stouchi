@@ -6,6 +6,8 @@ ideas.txt
 ides_readme.txt
 chat_correction.txt
 
+ansible/.ansible/
+
 terraform/azure/.terraform/
 terraform/azure/terraform.tfstate
 terraform/azure/terraform.tfstate.*
