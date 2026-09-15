@@ -38,6 +38,10 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    env:
+      OWNER: ${{ toLower(github.repository_owner) }}
+
+
     steps:
 
       - uses: actions/checkout@v4
@@ -62,8 +66,6 @@ jobs:
 
       - name: Build Docker Image with two tags from Dockerfile
         run: |
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-
           docker build \
             -t ghcr.io/$OWNER/stouchi-app:main \
             -t ghcr.io/$OWNER/stouchi-app:${{ github.sha }} \
@@ -72,7 +74,7 @@ jobs:
       - name: Scan main image with Trivy ### no need to scan both images, same image different names ###
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: 'ghcr.io/$OWNER/stouchi-app:main'
+          image-ref: 'ghcr.io/${{ env.OWNER }}/stouchi-app:main'
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
