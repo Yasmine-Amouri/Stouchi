@@ -4,21 +4,18 @@
 - name: Configure Stouchi production server (ansible ssh as deploy user)
   hosts: stouchi-prod-server
   remote_user: deploy
-  become: true ### so Ansible can become root ### 
-
-  vars_files:
-    - group_vars/stouchi-prod-server/vault.yml
+  become: true ### so Ansible can become root ###
 
   tasks:
 
     - name: Install Docker and Docker Compose
       ansible.builtin.apt:
-        name: 
-        - docker.io
-        - docker-compose-v2
+        name:
+          - docker.io
+          - docker-compose-v2
         state: present
         update_cache: true
-    
+
     - name: Add deploy to Docker group
       ansible.builtin.user:
         name: deploy
@@ -52,7 +49,7 @@
         owner: deploy
         group: deploy
         mode: '0600'
-    
+
     - name: Log into GHCR
       community.docker.docker_login:
         registry_url: ghcr.io
@@ -72,5 +69,3 @@
         files:
           - docker-compose.prod.yml
         state: present
-
-    
