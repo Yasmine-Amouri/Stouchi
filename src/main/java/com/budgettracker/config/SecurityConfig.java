@@ -48,7 +48,7 @@ public class SecurityConfig {
                             "/auth/login",
                             "/index.html",
                             "/error",
-                            "/actuator/health", /*for cd.yml: health check*/
+                            "/actuator/health", /*for cd.yml: health-check*/
                             "/actuator/health/liveness",
                             "/actuator/health/readiness"
 
