@@ -1,7 +1,7 @@
-profile: production ### To use all production-level rules (strict), but to skip the undefined-variable check ##""
+profile: production ### To use all production-level rules (strict), but to skip the undefined-variable check ###
 
 skip_list:
   - undefined-variable  ### Vars from vault will be defined at runtime ###
 
 exclude_paths:
-  - group_vars/stouchi-prod-server/vault.yml
+  - group_vars/stouchi-prod-server/vault.yml ### # To not lint vault file itself ###
