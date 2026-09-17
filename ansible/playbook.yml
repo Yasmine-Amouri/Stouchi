@@ -6,6 +6,9 @@
   remote_user: deploy
   become: true ### so Ansible can become root ###
 
+  vars_files:
+    - group_vars/stouchi-prod-server/vault.yml
+
   tasks:
 
     - name: Install Docker and Docker Compose
