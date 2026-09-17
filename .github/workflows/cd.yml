@@ -96,6 +96,12 @@ jobs:
             -e "ansible_host=$VM_IP" \
             --vault-password-file /tmp/stouchi_vault_pwd \
             playbook.yml
+
+      - name: Test port 8080
+        run: |
+          timeout 5 bash -c "</dev/tcp/$VM_IP/8080" \
+            && echo "Port 8080 is reachable" \
+            || echo "Port 8080 is NOT reachable"
       
       - name: Health Check
         run: |
