@@ -97,49 +97,30 @@ jobs:
             --vault-password-file /tmp/stouchi_vault_pwd \
             playbook.yml
 
-      - name: Compare VM ports
-        run: |
-          echo "Testing SSH port 22..."
-          timeout 5 bash -c "</dev/tcp/$VM_IP/22" \
-            && echo "Port 22: REACHABLE" \
-            || echo "Port 22: NOT REACHABLE"
-
-          echo "Testing application port 8080..."
-          timeout 5 bash -c "</dev/tcp/$VM_IP/8080" \
-            && echo "Port 8080: REACHABLE" \
-            || echo "Port 8080: NOT REACHABLE"
-      
-      - name: Compare rejected ports
-        run: |
-          echo "Testing 8080..."
-          timeout 5 bash -c "</dev/tcp/$VM_IP/8080" \
-            && echo "8080 reachable" \
-            || echo "8080 refused/unreachable"
-
-          echo "Testing 9999..."
-          timeout 5 bash -c "</dev/tcp/$VM_IP/9999" \
-            && echo "9999 reachable" \
-            || echo "9999 refused/unreachable"
-      
       - name: Health Check
         run: |
           for i in {1..12}; do
             echo "Health Check Attempt $i/12"
 
-            liveness=$(curl -s --fail "http://${VM_IP}:8080/actuator/health/liveness")
-            readiness=$(curl -s --fail "http://${VM_IP}:8080/actuator/health/readiness")
+            if liveness=$(curl -s --fail "http://${VM_IP}:8080/actuator/health/liveness") &&
+              readiness=$(curl -s --fail "http://${VM_IP}:8080/actuator/health/readiness"); then
 
-            echo "Liveness:  $liveness"
-            echo "Readiness: $readiness"
+              echo "Liveness:  $liveness"
+              echo "Readiness: $readiness"
 
-            if [[ "$liveness" == '{"status":"UP"}' && "$readiness" == '{"status":"UP"}' ]]; then
-              echo "Application is healthy!"
-              exit 0
+              if [[ "$liveness" == '{"status":"UP"}' && "$readiness" == '{"status":"UP"}' ]]; then
+                echo "Application is healthy!"
+                exit 0
+              fi
+            else
+              echo "Could not connect to the application."
             fi
 
-            echo "Application not ready yet. Waiting 5 seconds..."
-            sleep 5
+            if [[ $i -lt 12 ]]; then
+              echo "Application not ready yet. Waiting 5 seconds..."
+              sleep 5
+            fi
           done
 
-          echo "Application failed the health check."
+          echo "Application failed the health check after 12 attempts."
           exit 1
