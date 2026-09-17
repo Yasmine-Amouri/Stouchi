@@ -22,6 +22,7 @@ jobs:
       src: ${{ steps.changes.outputs.src }}
       pom: ${{ steps.changes.outputs.pom }}
       dockerfile: ${{ steps.changes.outputs.dockerfile }}
+      ansible: ${{ steps.changes.outputs.ansible }}
     
     steps:
 
@@ -39,6 +40,8 @@ jobs:
               - 'Dockerfile'
             terraform:
               - 'terraform/**'
+            ansible:
+              - 'ansible/**'
   
   infra:
 
@@ -65,6 +68,10 @@ jobs:
       always() &&
       (needs.ci.result == 'success' || needs.ci.result == 'skipped') &&
       (needs.infra.result == 'success' || needs.infra.result == 'skipped') &&
-      (needs.ci.result == 'success' || needs.infra.result == 'success')
+      (
+        needs.ci.result == 'success' ||
+        needs.infra.result == 'success' ||
+        needs.detect.outputs.ansible == 'true'
+      )
     uses: ./.github/workflows/cd.yml
     secrets: inherit

@@ -97,11 +97,29 @@ jobs:
             --vault-password-file /tmp/stouchi_vault_pwd \
             playbook.yml
 
-      - name: Test port 8080
+      - name: Compare VM ports
         run: |
+          echo "Testing SSH port 22..."
+          timeout 5 bash -c "</dev/tcp/$VM_IP/22" \
+            && echo "Port 22: REACHABLE" \
+            || echo "Port 22: NOT REACHABLE"
+
+          echo "Testing application port 8080..."
           timeout 5 bash -c "</dev/tcp/$VM_IP/8080" \
-            && echo "Port 8080 is reachable" \
-            || echo "Port 8080 is NOT reachable"
+            && echo "Port 8080: REACHABLE" \
+            || echo "Port 8080: NOT REACHABLE"
+      
+      - name: Compare rejected ports
+        run: |
+          echo "Testing 8080..."
+          timeout 5 bash -c "</dev/tcp/$VM_IP/8080" \
+            && echo "8080 reachable" \
+            || echo "8080 refused/unreachable"
+
+          echo "Testing 9999..."
+          timeout 5 bash -c "</dev/tcp/$VM_IP/9999" \
+            && echo "9999 reachable" \
+            || echo "9999 refused/unreachable"
       
       - name: Health Check
         run: |
