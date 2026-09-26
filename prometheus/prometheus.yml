@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "stouchi"
+    metrics_path: "/actuator/prometheus"
+
+    static_configs:
+      - targets: ["app:8080"]
+
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "http_server_requests_.*|jvm_memory_.*|jvm_gc_.*|jvm_threads_.*|process_cpu_.*|process_uptime_seconds|system_cpu_.*|system_load_average_1m|disk_.*|hikaricp_.*|application_(started|ready)_time_seconds"
+        action: keep

@@ -50,8 +50,8 @@ public class SecurityConfig {
                             "/error",
                             "/actuator/health", /*for cd.yml: health-check*/
                             "/actuator/health/liveness",
-                            "/actuator/health/readiness"
-
+                            "/actuator/health/readiness",
+                            "/actuator/prometheus" /*monitoring*/
                     ).permitAll()
                     .anyRequest().authenticated()
             )

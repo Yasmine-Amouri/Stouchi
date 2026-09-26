@@ -29,5 +29,27 @@ services:
       postgres:
         condition: service_healthy
 
+  prometheus:
+    image: prom/prometheus
+    container_name: budget-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml ### bind mount: so Prometheus can read cfg file ###
+      - prometheus-data:/prometheus ### Prometheus historical time-series data ###
+
+  grafana:
+    image: grafana/grafana
+    container_name: budget-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning ### bind mount: so Grafana can read provisioning cfg file ###
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards/json ### bind mount: so Grafana can read dashboards json files ###
+
+### Named Docker Volume ###
 volumes:
   postgres-data:
+  prometheus-data:
+  grafana-data:
